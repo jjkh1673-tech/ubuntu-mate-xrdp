@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xorgxrdp \
     ubuntu-mate-core \
     mate-themes \
+    mate-menu \
     xorg \
     dbus-x11 \
     dbus \
@@ -75,6 +76,7 @@ RUN su - ubuntu -c 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh 
     printf 'export PATH="/home/ubuntu/.local/bin:$PATH"\n' > /etc/profile.d/hermes.sh
 
 # Modern theme, wallpaper and icons.
+RUN sed -i 's/BriskMenuFactory::BriskMenu/MateMenuAppletFactory::MateMenuApplet/g' /usr/share/mate-panel/layouts/*.layout
 COPY assets/wallpaper.png /usr/share/backgrounds/wallpaper.png
 COPY assets/hermes-ai.png /usr/share/icons/hicolor/256x256/apps/hermes-ai.png
 COPY assets/apply-theme.sh /usr/local/bin/apply-theme.sh
