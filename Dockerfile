@@ -48,6 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     shellcheck \
     papirus-icon-theme \
     yaru-theme-gtk \
+    plank \
+    x11-apps \
     && rm -rf /var/lib/apt/lists/*
 
 # ubuntu:24.04 already ships an `ubuntu` user (uid 1000, /bin/bash, sudo group).
@@ -84,12 +86,27 @@ COPY assets/apply-theme.desktop /etc/xdg/autostart/apply-theme.desktop
 RUN chmod +x /usr/local/bin/apply-theme.sh && \
     (gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true)
 
+# Hermes Desktop GUI app (Electron). Fork: jjkh1673-tech/hermes-desktop (upstream sir1st/hermes-desktop).
+RUN curl -fsSL -o /tmp/hermes-desktop.deb https://github.com/sir1st/hermes-desktop/releases/download/v0.1.10/Hermes.Desktop-0.1.10-amd64.deb && \
+    apt-get update && \
+    (dpkg -i /tmp/hermes-desktop.deb || true) && \
+    apt-get install -y -f && \
+    rm -f /tmp/hermes-desktop.deb && rm -rf /var/lib/apt/lists/*
+
+# Left dock, analog clock widget and Hermes Desktop launcher wiring (reference desktop style).
+COPY assets/hermes-desktop-launch /usr/local/bin/hermes-desktop-launch
+COPY assets/plank.desktop /etc/xdg/autostart/plank.desktop
+COPY assets/xclock.desktop /etc/xdg/autostart/xclock.desktop
+COPY assets/plank-settings /home/ubuntu/.config/plank/dock1/settings
+RUN chmod +x /usr/local/bin/hermes-desktop-launch && \
+    chown -R ubuntu:ubuntu /home/ubuntu/.config
+
 RUN mkdir -p /usr/share/applications && \
     printf '%s\n' \
     '[Desktop Entry]' \
-    'Name=Hermes AI' \
-    'Comment=Upstream Hermes Agent terminal' \
-    'Exec=mate-terminal -e hermes' \
+    'Name=Hermes Desktop' \
+    'Comment=Hermes Desktop app (fork: jjkh1673-tech/hermes-desktop)' \
+    'Exec=/usr/local/bin/hermes-desktop-launch' \
     'Icon=/usr/share/icons/hicolor/256x256/apps/hermes-ai.png' \
     'Terminal=false' \
     'Type=Application' \

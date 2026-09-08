@@ -1,0 +1,10 @@
+#!/bin/sh
+# Launch Hermes Desktop (Electron) inside the XRDP session.
+# Fork: github.com/jjkh1673-tech/hermes-desktop (upstream: sir1st/hermes-desktop)
+BIN="$(command -v hermes-desktop 2>/dev/null || true)"
+[ -z "$BIN" ] && BIN="$(find /opt -maxdepth 2 -type f -name 'hermes-desktop' -print -quit 2>/dev/null)"
+if [ -n "$BIN" ]; then
+  exec "$BIN" --no-sandbox "$@"
+fi
+echo "Hermes Desktop binary not found" >&2
+exit 1

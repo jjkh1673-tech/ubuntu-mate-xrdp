@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Plank
+Comment=Dock with application launchers
+Exec=plank
+Terminal=false
+X-MATE-Autostart-enabled=true
