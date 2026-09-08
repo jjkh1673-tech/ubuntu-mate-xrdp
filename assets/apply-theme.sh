@@ -5,4 +5,7 @@ gsettings set org.mate.interface gtk-theme "BlackMATE" 2>/dev/null
 gsettings set org.mate.interface icon-theme "Papirus-Dark" 2>/dev/null
 gsettings set org.mate.background picture-filename /usr/share/backgrounds/wallpaper.png 2>/dev/null
 gsettings set org.mate.background picture-options "zoom" 2>/dev/null
+# Reference-desktop style: dock on the left (plank reads gsettings/dconf).
+gsettings set "net.launchpad.plank.dock.settings:/net/launchpad/plank/docks/dock1/" position left 2>/dev/null
+gsettings set org.mate.caja.desktop home-icon-visible false 2>/dev/null
 exit 0

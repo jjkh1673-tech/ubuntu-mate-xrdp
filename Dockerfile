@@ -97,7 +97,7 @@ RUN curl -fsSL -o /tmp/hermes-desktop.deb https://github.com/sir1st/hermes-deskt
 COPY assets/hermes-desktop-launch /usr/local/bin/hermes-desktop-launch
 COPY assets/plank.desktop /etc/xdg/autostart/plank.desktop
 COPY assets/xclock.desktop /etc/xdg/autostart/xclock.desktop
-COPY assets/plank-settings /home/ubuntu/.config/plank/dock1/settings
+COPY assets/hermes.dockitem /home/ubuntu/.config/plank/dock1/launchers/hermes.dockitem
 RUN chmod +x /usr/local/bin/hermes-desktop-launch && \
     chown -R ubuntu:ubuntu /home/ubuntu/.config
 
