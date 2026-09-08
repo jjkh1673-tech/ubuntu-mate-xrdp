@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Apply Theme
+Exec=/usr/local/bin/apply-theme.sh
+OnlyShowIn=MATE;
+NoDisplay=true
