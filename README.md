@@ -99,6 +99,7 @@ same Dockerfile/start.sh structure with `ubuntu-mate-core` and `mate-session`.
 ## Hermes Desktop (GUI)
 
 Bundles the Electron **Hermes Desktop** app (fork: `jjkh1673-tech/hermes-desktop`, upstream `sir1st/hermes-desktop`)
-with a desktop launcher icon (image-2). The CLI agent remains available as `hermes`.
-The desktop ships a left-side Plank dock, an analog clock widget, and the anime wallpaper (image-1)
-to match the reference look across both repos.
+with a desktop launcher + dock icon (image-2). The CLI agent remains available as `hermes`.
+The desktop ships a left-side Plank dock, an analog clock widget, and the blue anime wallpaper
+(image-1, exclusive to this MATE edition). The sibling XFCE edition (`ubuntu-xrdp`) shares the
+same dock, clock, and Hermes icon styling with its classic dark Ubuntu wallpaper.
