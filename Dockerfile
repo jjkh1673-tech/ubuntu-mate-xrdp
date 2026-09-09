@@ -79,6 +79,9 @@ RUN su - ubuntu -c 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh 
 
 # Modern theme, wallpaper and icons.
 RUN sed -i 's/BriskMenuFactory::BriskMenu/MateMenuAppletFactory::MateMenuApplet/g' /usr/share/mate-panel/layouts/*.layout
+# The default 'familiar' layout shows no clock (it expects indicator-datetime,
+# which is not installed), so append the stock clock applet to the top bar.
+RUN printf '%s\n' '' '[Object clock]' 'object-type=applet' 'applet-iid=ClockAppletFactory::ClockApplet' 'toplevel-id=top' 'position=10' 'relative-to-edge=end' 'locked=true' >> /usr/share/mate-panel/layouts/familiar.layout
 COPY assets/wallpaper.png /usr/share/backgrounds/wallpaper.png
 COPY assets/hermes-ai.png /usr/share/icons/hicolor/256x256/apps/hermes-ai.png
 COPY assets/apply-theme.sh /usr/local/bin/apply-theme.sh
