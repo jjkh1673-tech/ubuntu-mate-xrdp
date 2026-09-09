@@ -17,7 +17,7 @@ gsettings set org.mate.caja.desktop home-icon-visible false 2>/dev/null
 # clock drawn in the wallpaper, so the live clock replaces it instead of doubling up.
 pkill -x xclock 2>/dev/null
 ( setsid xclock -analog -padding 1 -update 1 -background white -foreground black \
-    -hd black -hl black -bd white -geometry 130x130+0+30 >/dev/null 2>&1 & )
+    -hd black -hl black -bd white -geometry 110x110+0+28 >/dev/null 2>&1 & )
 for i in $(seq 1 20); do
   WID=$(xdotool search --name xclock 2>/dev/null | head -1)
   [ -n "$WID" ] && break
@@ -30,7 +30,7 @@ if [ -n "$WID" ]; then
   xprop -id "$WID" -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK 2>/dev/null
   xdotool windowunmap "$WID" 2>/dev/null; sleep 1
   xdotool windowmap "$WID" 2>/dev/null
-  xdotool windowmove "$WID" 0 30 2>/dev/null
+  xdotool windowmove "$WID" 0 28 2>/dev/null
 fi
 gsettings set "net.launchpad.plank.dock.settings:/net/launchpad/plank/docks/dock1/" icon-size 40 2>/dev/null
 exit 0

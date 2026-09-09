@@ -180,10 +180,9 @@ RUN mkdir -p /usr/share/applications && \
     'Categories=Development;Utility;' \
     > /usr/share/applications/hermes-ai.desktop
 
-RUN mkdir -p /home/ubuntu/Desktop && \
-    cp /usr/share/applications/hermes-ai.desktop /home/ubuntu/Desktop/ && \
-    chmod +x /home/ubuntu/Desktop/hermes-ai.desktop && \
-    chown -R ubuntu:ubuntu /home/ubuntu/Desktop
+# No ~/Desktop copy here: the reference look puts Hermes Desktop in the dock, and a desktop
+# icon would sit exactly where the clock widget is drawn. The dock item and the Applications
+# menu entry both launch it.
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
