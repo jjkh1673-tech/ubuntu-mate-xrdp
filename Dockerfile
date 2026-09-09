@@ -4,7 +4,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Refresh the package index, apply every pending Ubuntu update, then install the
+# desktop + toolchain, all in one layer so the image ships a fully patched system
+# (`apt-get upgrade` inside the container afterwards reports nothing pending).
+RUN apt-get update && \
+    apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade && \
+    apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
@@ -50,6 +55,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     yaru-theme-gtk \
     plank \
     x11-apps \
+    x11-utils \
+    xdotool \
     && rm -rf /var/lib/apt/lists/*
 
 # ubuntu:24.04 already ships an `ubuntu` user (uid 1000, /bin/bash, sudo group).
@@ -68,7 +75,17 @@ RUN printf 'mate-session\n' > /home/ubuntu/.xsession && \
     sed -i 's/^allowed_users=.*/allowed_users=anybody/' /etc/X11/Xwrapper.config || true
 
 # Install the real upstream Hermes Agent. No custom wrapper and no API key is baked into the image.
-RUN su - ubuntu -c 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash' && \
+# The installer clones the upstream repo anonymously and GitHub throttles bursts of anonymous
+# fetches (HTTP 429); the installer's own retries span ~35s, which is shorter than GitHub's
+# window, so a build could die on a step unrelated to this repository. Retry the whole install
+# with a backoff, and fail the build loudly if every attempt fails.
+RUN ok=0; \
+    for attempt in 1 2 3 4 5; do \
+      if su - ubuntu -c 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash'; then ok=1; break; fi; \
+      echo "Hermes install attempt $attempt failed (GitHub may be rate-limiting this network); retrying in 60s"; \
+      sleep 60; \
+    done; \
+    [ "$ok" = 1 ] || { echo "Hermes Agent install failed after 5 attempts"; exit 1; }; \
     HERMES_BIN="$(find /home/ubuntu/.local/bin /home/ubuntu/.hermes/bin -type f -name hermes -perm -111 -print -quit 2>/dev/null)" && \
     test -n "$HERMES_BIN" && \
     ln -sf "$HERMES_BIN" /usr/local/bin/hermes && \
@@ -105,7 +122,8 @@ RUN chmod +x /usr/local/bin/apply-theme.sh && \
     (gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true)
 
 # Hermes Desktop GUI app (Electron). Fork: jjkh1673-tech/hermes-desktop (upstream sir1st/hermes-desktop).
-RUN curl -fsSL -o /tmp/hermes-desktop.deb https://github.com/sir1st/hermes-desktop/releases/download/v0.1.10/Hermes.Desktop-0.1.10-amd64.deb && \
+# --retry absorbs the same transient GitHub throttling as the Hermes install above.
+RUN curl -fsSL --retry 5 --retry-delay 15 --retry-all-errors -o /tmp/hermes-desktop.deb https://github.com/sir1st/hermes-desktop/releases/download/v0.1.10/Hermes.Desktop-0.1.10-amd64.deb && \
     apt-get update && \
     (dpkg -i /tmp/hermes-desktop.deb || true) && \
     apt-get install -y -f && \
@@ -114,7 +132,6 @@ RUN curl -fsSL -o /tmp/hermes-desktop.deb https://github.com/sir1st/hermes-deskt
 # Left dock, analog clock widget and Hermes Desktop launcher wiring (reference desktop style).
 COPY assets/hermes-desktop-launch /usr/local/bin/hermes-desktop-launch
 COPY assets/plank.desktop /etc/xdg/autostart/plank.desktop
-COPY assets/xclock.desktop /etc/xdg/autostart/xclock.desktop
 COPY assets/hermes.dockitem /home/ubuntu/.config/plank/dock1/launchers/hermes.dockitem
 COPY assets/mate-terminal.dockitem /home/ubuntu/.config/plank/dock1/launchers/mate-terminal.dockitem
 RUN chmod +x /usr/local/bin/hermes-desktop-launch && \

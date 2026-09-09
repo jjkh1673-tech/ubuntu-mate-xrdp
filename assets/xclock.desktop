@@ -1,6 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Analog Clock
-Comment=Analog clock widget
-Exec=xclock -analog -background white -foreground black -hd black -hl black -bd white -geometry 140x140+170+40 -update 1
-Terminal=false
