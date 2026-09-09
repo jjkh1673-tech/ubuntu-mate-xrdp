@@ -114,6 +114,37 @@ lines[i:j + 1] = ['[Object menu-bar]', 'object-type=menu-bar', 'toplevel-id=top'
 open(p, 'w', encoding='utf-8').write('\n'.join(lines))
 print('briskmenu replaced with stock menu-bar')
 EOF
+# The reference desktop has a single top bar. Drop the bottom window-list panel and the
+# snap Firefox launcher (snapd does not exist inside a container) from the layout file
+# mate-panel applies on first login.
+RUN python3 - <<'EOF'
+import re
+p = '/usr/share/mate-panel/layouts/familiar.layout'
+lines = open(p, encoding='utf-8').read().split('\n')
+out, i, removed = [], 0, []
+while i < len(lines):
+    line = lines[i]
+    if line.strip() == '[Toplevel bottom]':
+        removed.append('Toplevel bottom')
+        i += 1
+        while i < len(lines) and lines[i].strip() and not lines[i].startswith('['):
+            i += 1
+        continue
+    m = re.match(r'^\[Object ([^\]]+)\]\s*$', line)
+    if m:
+        j = i + 1
+        while j < len(lines) and lines[j].strip():
+            j += 1
+        block = lines[i:j]
+        if any(b.strip() == 'toplevel-id=bottom' for b in block) or m.group(1) == 'firefox':
+            removed.append('Object ' + m.group(1))
+            i = j
+            continue
+    out.append(line)
+    i += 1
+open(p, 'w', encoding='utf-8').write('\n'.join(out))
+print('removed from familiar.layout:', ', '.join(removed) or 'nothing')
+EOF
 COPY assets/wallpaper.png /usr/share/backgrounds/wallpaper.png
 COPY assets/hermes-ai.png /usr/share/icons/hicolor/256x256/apps/hermes-ai.png
 COPY assets/apply-theme.sh /usr/local/bin/apply-theme.sh
