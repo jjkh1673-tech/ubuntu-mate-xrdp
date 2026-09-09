@@ -8,7 +8,4 @@ gsettings set org.mate.background picture-options "zoom" 2>/dev/null
 # Reference-desktop style: dock on the left (plank reads gsettings/dconf).
 gsettings set "net.launchpad.plank.dock.settings:/net/launchpad/plank/docks/dock1/" position left 2>/dev/null
 gsettings set org.mate.caja.desktop home-icon-visible false 2>/dev/null
-# First login can start the panel before the mate-menu factory is warm, leaving
-# the Menu button blank until the panel reloads. One reload fixes it.
-(mate-panel --replace >/dev/null 2>&1 &)
 exit 0

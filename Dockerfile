@@ -82,6 +82,21 @@ RUN sed -i 's/BriskMenuFactory::BriskMenu/MateMenuAppletFactory::MateMenuApplet/
 # The default 'familiar' layout shows no clock (it expects indicator-datetime,
 # which is not installed), so append the stock clock applet to the top bar.
 RUN printf '%s\n' '' '[Object clock]' 'object-type=applet' 'applet-iid=ClockAppletFactory::ClockApplet' 'toplevel-id=top' 'position=10' 'relative-to-edge=end' 'locked=true' >> /usr/share/mate-panel/layouts/familiar.layout
+
+# The Mint-style mate-menu applet races at first login: its factory is still
+# cold when the panel requests the applet, so the Menu button never appears.
+# Use the built-in menu-bar instead: the panel draws it itself, so it always loads.
+RUN python3 - <<'EOF'
+p = '/usr/share/mate-panel/layouts/familiar.layout'
+lines = open(p, encoding='utf-8').read().split('\n')
+assert '[Object briskmenu]' in lines, 'briskmenu block not found in familiar.layout'
+i = lines.index('[Object briskmenu]')
+j = next((k for k in range(i + 1, len(lines)) if lines[k] == ''), len(lines) - 1)
+lines[i:j + 1] = ['[Object menu-bar]', 'object-type=menu-bar', 'toplevel-id=top',
+                  'position=0', 'locked=true', '']
+open(p, 'w', encoding='utf-8').write('\n'.join(lines))
+print('briskmenu replaced with stock menu-bar')
+EOF
 COPY assets/wallpaper.png /usr/share/backgrounds/wallpaper.png
 COPY assets/hermes-ai.png /usr/share/icons/hicolor/256x256/apps/hermes-ai.png
 COPY assets/apply-theme.sh /usr/local/bin/apply-theme.sh
