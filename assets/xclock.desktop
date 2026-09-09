@@ -2,5 +2,5 @@
 Type=Application
 Name=Analog Clock
 Comment=Analog clock widget
-Exec=xclock -analog -background white -foreground black -hd black -hl black -bd white -size 140 -geometry +130+15 -update 1
+Exec=xclock -analog -background white -foreground black -hd black -hl black -bd white -geometry 140x140+130+40 -update 1
 Terminal=false
