@@ -9,7 +9,7 @@ AI agent in the terminal.
 What a user sees after connecting over RDP, captured in a real `xfreerdp` session logged in as
 `ubuntu` (1280x800, first login, nothing hand-edited afterwards):
 
-![Ubuntu MATE XRDP desktop: blue anime wallpaper, single top panel, left Plank dock, analog clock widget on the wallpaper, Hermes Desktop icon](assets/preview.png)
+![Ubuntu MATE XRDP desktop: the reference wallpaper, single top panel, left Plank dock with Hermes Desktop and the terminal pinned, frameless analog clock widget over the drawn clock](assets/preview.png)
 
 The layout follows the wallpaper: the analog clock widget sits over the drawn clock so the live
 one replaces it, the Plank dock on the left pins Hermes Desktop and the terminal, and only the
@@ -106,18 +106,19 @@ configure Hermes via `hermes setup`.
 ## Verification status
 
 Verified on a GitHub Codespace (`standardLinux32gb`: 4 vCPU, 16 GB RAM, root through
-passwordless sudo) with Docker 29.7.2, building `main` at 39c65d3 into an empty image store.
+passwordless sudo) with Docker 29.7.2, building `main` at b8d9a1f into an image store that
+had been pruned to nothing, so no layer was inherited from an earlier build.
 
 | Check | Result |
 | --- | --- |
-| `docker build` from scratch | PASS - exit 0, image 7.9 GB |
-| GitHub Actions CI build | PASS - run #12 on the same commit |
+| `docker build` from scratch | PASS - exit 0, image 7.91 GB |
+| GitHub Actions CI build | PASS - run #13 on the same commit |
 | Container starts and stays up | PASS - `healthy`, restart count 0 |
 | Healthcheck (`xrdp` + `xrdp-sesman`) | PASS - both processes running, TCP 3389 listening |
 | Real RDP login as `ubuntu` | PASS - username and password typed into the XRDP login window through an `xfreerdp` client session; server log: `login successful for user ubuntu on display 10` |
 | MATE session after login | PASS - session, window manager, panel and Plank all start; no black screen, no disconnect |
-| Desktop layout | PASS - single top panel with menu and clock, left Plank dock with Hermes Desktop and terminal, analog clock widget aligned with the wallpaper, no bottom panel |
-| Root access for the RDP user | PASS - `sudo -i` from that session gives `uid=0(root)`; `sudo -l` shows `(ALL) NOPASSWD: ALL`, `/etc/sudoers.d/ubuntu` is `0440` |
+| Desktop layout | PASS - single top panel with menu and clock, left Plank dock pinning Hermes Desktop and the terminal, 110px frameless analog clock widget over the clock drawn in the wallpaper, no bottom panel, no leftover home/filesystem/trash icons |
+| Root access for the RDP user | PASS - `whoami`, `sudo -i`, `id`, `nproc`, `free -g` and `apt-get -s upgrade` typed into a terminal inside the RDP session (`uid=0(root)`, 4 CPUs, 15 GB); `sudo -l` shows `(ALL) NOPASSWD: ALL`, `/etc/sudoers.d/ubuntu` is `0440` |
 | Image is already patched | PASS - `apt-get update && apt-get -s upgrade` inside the container reports `0 upgraded`; base is Ubuntu 24.04.5 LTS |
 | Hermes CLI | PASS - `hermes --version` -> `Hermes Agent v0.21.1 (2026.9.7)`; `ai` opens the real agent prompt (19 tools, skill list, `/help`) |
 | Hermes Desktop app | PASS - `/usr/local/bin/hermes-desktop-launch` opens the app window inside the RDP session (`Web UI v0.6.7`) |
@@ -133,8 +134,11 @@ to the upstream install, not to this image.
 ## Hermes Desktop (GUI)
 
 Bundles the Electron **Hermes Desktop** app (fork: `jjkh1673-tech/hermes-desktop`, upstream
-`sir1st/hermes-desktop`): launcher on the desktop, icon in the Plank dock, and the black-and-white
-Hermes artwork as its application icon. The CLI agent stays available as `hermes` / `ai`.
-Both editions share the same dock, clock widget and icon styling; the wallpaper is the only thing
-that differs - this XFCE edition keeps the classic dark Ubuntu wallpaper, and the MATE edition
-(ubuntu-mate-xrdp) uses the blue anime wallpaper.
+`sir1st/hermes-desktop`): pinned in the Plank dock, listed in the Applications menu, and the
+black-and-white Hermes artwork as its application icon. The CLI agent stays available as
+`hermes` / `ai`. There is deliberately no copy of the launcher on the desktop itself - the dock is
+where the reference layout puts it, and a desktop icon would end up under the clock widget.
+Both editions share the dock and clock-widget styling; the wallpaper and the clock geometry are
+what differ - this MATE edition uses the blue reference art with the widget over the drawn clock,
+the XFCE edition (ubuntu-xrdp) keeps the classic dark Ubuntu wallpaper, a desktop launcher and the
+widget further to the right.
