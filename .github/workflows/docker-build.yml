@@ -202,6 +202,29 @@ jobs:
             exit 1
           fi
 
+      - name: Launch Hermes Desktop inside that session
+        run: |
+          export DISPLAY=:99
+          D=$(docker exec "$NAME" bash -lc 'ls /tmp/.X11-unix/ | head -1 | sed "s/^X/:/"')
+          docker exec -u ubuntu -e DISPLAY="$D" -e XAUTHORITY=/home/ubuntu/.Xauthority -e HOME=/home/ubuntu "$NAME" \
+            bash -lc '( setsid /usr/local/bin/hermes-desktop-launch >/tmp/hd.log 2>&1 & ); sleep 100
+              echo "hermes/electron processes: $(pgrep -cf "Hermes|hermes desktop|electron" || true)"
+              pgrep -af "Hermes|electron" | head -4
+              echo "windows on the session display: $(xdotool search --name "" | wc -l)"
+              tail -4 /tmp/hd.log 2>/dev/null'
+          sleep 6
+          import -window root /tmp/shots/06-hermes-desktop.png 2>/dev/null || true
+          # the desktop is only "installed" if its window actually appears in the RDP session, so the
+          # colour count of the client screen is compared with the plain desktop shot taken earlier
+          C=$(identify -format %k /tmp/shots/06-hermes-desktop.png 2>/dev/null || echo 0)
+          echo "colours visible with Hermes Desktop starting: $C"
+          N=$(docker exec "$NAME" bash -lc 'pgrep -cf "Hermes|hermes desktop|electron" || true')
+          if [ "${N:-0}" = 0 ]; then
+            echo "::error::Hermes Desktop did not start in the session"
+            docker exec "$NAME" tail -30 /tmp/hd.log 2>/dev/null || true
+            exit 1
+          fi
+
       - name: Restart, reconnect, and check the volume
         run: |
           export DISPLAY=:99

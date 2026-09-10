@@ -1,16 +1,22 @@
 #!/bin/sh
 # Launch the official Hermes Desktop app.
 #
-# Nothing third-party is installed here: the app comes from the same installer the terminal
-# agent uses (hermes-agent.nousresearch.com), and `hermes desktop` is its own desktop launcher.
-# The image build already ran `hermes desktop --build-only`, so the packaged artifact exists and
-# the first attempt below usually starts it straight away. If it was never built (for example a
-# custom image without that step), the fallback compiles it on the spot - that takes a few
-# minutes the first time and prints progress in this window.
+# Nothing third-party is installed here. The app comes from the same installer the terminal agent
+# uses (hermes-agent.nousresearch.com), and `hermes desktop` is its own launcher: the image build
+# ran `hermes desktop --build-only`, so the packaged artifact already exists and the first attempt
+# below starts it directly. If the image was built without that step, the last line compiles it -
+# a few minutes, once, and it prints progress in this window when started from a terminal.
+#
+# ELECTRON_DISABLE_SANDBOX is tried because a container has no user namespaces for Electron's
+# own sandbox; the plain call is attempted first so a normal machine keeps the sandbox.
 export PATH="/home/ubuntu/.local/bin:/usr/local/bin:$PATH"
 cd "${HOME:-/home/ubuntu}" || exit 1
-if hermes desktop --skip-build >/tmp/hermes-desktop.log 2>&1; then
+log=/tmp/hermes-desktop.log
+if hermes desktop --skip-build >>"$log" 2>&1; then
   exit 0
 fi
-echo "Hermes Desktop was not prebuilt; building it now (a few minutes, once)." >&2
+if ELECTRON_DISABLE_SANDBOX=1 hermes desktop --skip-build >>"$log" 2>&1; then
+  exit 0
+fi
+echo "Hermes Desktop needed a rebuild or the no-sandbox retry; see $log" >&2
 exec hermes desktop
