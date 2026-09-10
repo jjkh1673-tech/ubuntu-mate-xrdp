@@ -59,6 +59,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Set up the runner
         run: |
           sudo apt-get update -qq >/dev/null
