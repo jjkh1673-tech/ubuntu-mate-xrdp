@@ -22,6 +22,7 @@ RUN apt-get update && \
     xrdp \
     xorgxrdp \
     xorg \
+    xserver-xorg-legacy \
     ubuntu-mate-core \
     mate-themes \
     mate-menu \
@@ -94,7 +95,13 @@ RUN printf 'mate-session\n' > /home/ubuntu/.xsession && \
     chmod 700 /home/ubuntu/.xsession && \
     printf 'exec mate-session\n' > /etc/xrdp/startwm.sh && \
     chmod +x /etc/xrdp/startwm.sh && \
-    if [ -f /etc/X11/Xwrapper.config ]; then sed -i 's/^allowed_users=.*/allowed_users=anybody/' /etc/X11/Xwrapper.config; fi
+    sed -i 's/^allowed_users=.*/allowed_users=anybody/' /etc/X11/Xwrapper.config
+
+# Ubuntu 26.04 ships rootless X, which needs a login session with a VT - something a container does
+# not have. xserver-xorg-legacy puts the setuid wrapper back and allowed_users above lets any user
+# start the Xorg that xrdp runs per session; without these two lines the session dies at "X server
+# problem" and the RDP login never reaches a desktop.
+RUN grep -q allowed_users=anybody /etc/X11/Xwrapper.config
 
 # The real upstream Hermes Agent - installed exactly the way its own documentation says, for the
 # ubuntu user, so its home, memory and skills live in the mounted volume and no key is baked in.
