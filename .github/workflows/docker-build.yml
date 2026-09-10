@@ -64,6 +64,14 @@ jobs:
           sudo apt-get update -qq >/dev/null
           sudo apt-get install -y -qq xvfb freerdp2-x11 xdotool imagemagick >/dev/null
 
+      # A full desktop image has to fit on this runner twice over - the layers plus the running
+      # container - so the toolchains this job never uses are removed first.
+      - name: Free disk space for the run
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" /usr/local/.ghcup
+          df -h / | tail -1
+
       - name: Build and start the desktop container
         run: |
           df -h / | tail -1
