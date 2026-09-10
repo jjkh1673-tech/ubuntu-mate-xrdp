@@ -29,8 +29,8 @@ ensure_conf() {
 conf_get() { # conf_get <key> <default>
   ensure_conf
   local v
-  v=$(sed -n "s/^$key=//p" "$CONF" 2>/dev/null | tail -1)
-  [ -n "$v" ] && printf '%s' "$v" || printf '%s' "$2"
+  v=$(sed -n "s/^$1=//p" "$CONF" 2>/dev/null | tail -1)
+  if [ -n "$v" ]; then printf '%s' "$v"; else printf '%s' "$2"; fi
 }
 
 conf_set() { # conf_set <key> <value>
@@ -46,15 +46,12 @@ current_series() {
   printf '%s %s\n' "${VERSION_ID:-unknown}" "${VERSION_CODENAME:-unknown}"
 }
 
-newest_lts() { # echoes "<version> <codename>" using the release list, or nothing when offline
+newest_lts() { # echoes the newest LTS version number from Ubuntu's release list, or nothing when offline
   local url body
   for url in "${META_URLS[@]}"; do
     body=$(curl -fsSL --max-time 20 "$url" 2>/dev/null) || continue
     # Entries look like:  Dist: Ubuntu 26.04 LTS / Series: resolute / Version: 26.04
-    printf '%s\n' "$body" | awk '
-      /^Dist: Ubuntu [0-9]/ { v=$3; s=$4 }
-      /^Derived:/ { }
-      END { if (v) print v }' | head -1
+    printf '%s\n' "$body" | awk '/^Dist: Ubuntu [0-9]/ { print $3 }' | sort -V | tail -1
     return 0
   done
   return 1
@@ -188,7 +185,7 @@ gui() {
     "Upgrade to the next"*)
       (exec x-terminal-emulator -e "sudo ubuntu-migrate --migrate-lts") >/dev/null 2>&1 & ;;
     "Notifications"*)
-      if [ "$(conf_get notifications on)" = "on" ]; then conf_set notifications off; else conf_get notifications on; conf_set notifications on; fi
+      if [ "$(conf_get notifications on)" = "on" ]; then conf_set notifications off; else conf_set notifications on; fi
       zenity --info --text="Login notifications are now $(conf_get notifications on)." ;;
   esac
 }
