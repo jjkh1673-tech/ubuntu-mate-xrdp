@@ -120,18 +120,21 @@ jobs:
           sleep 1
           import -window root /tmp/shots/02-credentials-typed.png
           xdotool mousemove 650 541 click 1
+          # xrdp 0.10 does not print the one line older versions did, so the proof used here is the
+          # session itself: the desktop process has to be running on the display xrdp just opened.
           ok=0
-          for i in $(seq 1 36); do
+          for i in $(seq 1 40); do
             sleep 5
-            if docker logs "$NAME" 2>&1 | grep -q "login successful for user ubuntu"; then ok=1; break; fi
-            if docker logs "$NAME" 2>&1 | grep -qiE "login failed|X server problem|aborting session start"; then break; fi
+            if docker exec "$NAME" pgrep -f "mate-session" >/dev/null 2>&1; then ok=1; break; fi
           done
-          echo "session started from the typed login: $ok"
+          sleep 12
+          echo "desktop process running after the typed login: $ok"
+          docker exec "$NAME" bash -lc 'grep -hiE "logged in|login successful|X server :[0-9]+ is working|Session in progress" /var/log/xrdp.log /var/log/xrdp-sesman.log | tail -4'
           import -window root /tmp/shots/03-desktop-after-login.png
           import -window "$W" /tmp/shots/03b-desktop-window.png 2>/dev/null || true
-          docker logs "$NAME" 2>&1 | grep -iE "login (successful|failed)|X server|aborting" | tail -6
           if [ "$ok" = 0 ]; then
-            echo "the typed attempt produced no session; the reason is the sesman log below"
+            echo "no desktop process appeared; the logs are below"
+            docker logs "$NAME" 2>&1 | tail -30
             docker exec "$NAME" tail -30 /var/log/xrdp-sesman.log
             docker exec "$NAME" bash -lc 'for f in /home/ubuntu/.xsession-errors; do echo "--- $f"; tail -20 "$f" 2>/dev/null; done'
             exit 1
@@ -168,7 +171,8 @@ jobs:
             echo
             echo "| Check | Result |"
             echo '| --- | --- |'
-            echo "| RDP login | $(docker logs "$NAME" 2>&1 | grep -oE 'login successful for user ubuntu on display [0-9]+' | tail -1 || echo 'see the log') |"
+            echo "| RDP login typed into the form | $(docker exec "$NAME" bash -lc 'grep -hiE "Access permitted for user|logged in" /var/log/xrdp-sesman.log | tail -1' || echo see log) |"
+            echo "| Session on display | $(docker exec "$NAME" bash -lc 'grep -hoE "Session in progress on display :[0-9]+" /var/log/xrdp-sesman.log | tail -1' || echo see log) |"
             awk -F'\t' 'NF>1 { printf "| %s | %s |\n", $1, $2 }' /tmp/checks.txt
             echo
             echo "Screenshots: the \`rdp-screenshots\` artifact of this run."
@@ -194,12 +198,29 @@ jobs:
           docker exec -u ubuntu -e DISPLAY="$D" -e XAUTHORITY=/home/ubuntu/.Xauthority "$NAME" \
             bash -lc 'echo written $(date -Is) > ~/persist-check.txt'
           docker restart "$NAME" >/dev/null
-          sleep 40
+          sleep 30
           echo "health after restart: $(docker inspect --format '{{.State.Health.Status}}' "$NAME")"
-          timeout 60 xfreerdp /v:127.0.0.1 /cert:ignore /size:1280x800 /u:ubuntu /p:1122 >/dev/null 2>&1 &
-          sleep 25
+          # log in a second time, the same way, to show the same user gets their session back
+          pkill -x xfreerdp || true; sleep 2
+          nohup xfreerdp /v:127.0.0.1 /cert:ignore /size:1280x800 >/tmp/rdp2.log 2>&1 &
+          sleep 14
+          W=$(xdotool search --class freerdp | tail -1)
+          xdotool windowfocus "$W" 2>/dev/null || true
+          xdotool mousemove 681 412 click 1; sleep 1
+          for i in $(seq 1 20); do xdotool key BackSpace; done
+          xdotool type --clearmodifiers --delay 90 ubuntu
+          xdotool mousemove 681 439 click 1; sleep 1
+          xdotool type --clearmodifiers --delay 90 1122
+          xdotool mousemove 650 541 click 1
+          ok=0
+          for i in $(seq 1 30); do
+            sleep 5
+            docker exec "$NAME" pgrep -f "mate-session" >/dev/null 2>&1 && { ok=1; break; }
+          done
           import -window root /tmp/shots/05-after-restart-reconnect.png || true
-          docker logs "$NAME" 2>&1 | grep -iE "login (successful|failed)" | tail -1
+          echo "desktop back after restart and a second typed login: $ok"
+          [ "$ok" = 1 ] || { docker exec "$NAME" tail -20 /var/log/xrdp-sesman.log; exit 1; }
+          docker exec "$NAME" pgrep -af "mate-session" | head -2
           docker rm -f "$NAME" >/dev/null
           sleep 2
           docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$IMAGE:latest" >/dev/null
