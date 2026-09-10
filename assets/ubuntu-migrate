@@ -69,7 +69,10 @@ is_newer() { # is_newer <a> <b> -> 0 when a > b
   [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | tail -1)" = "$1" ] && [ "$1" != "$2" ]
 }
 
-image_ref() { [ -f "$IMAGE_REF_FILE" ] && head -1 "$IMAGE_REF_FILE" || printf 'ghcr.io/OWNER/ubuntu-xrdp:latest\n'; }
+image_ref() {
+  if [ -f "$IMAGE_REF_FILE" ]; then head -1 "$IMAGE_REF_FILE"; return; fi
+  printf '<your image tag, for example ubuntu-xrdp:26.04>\n'
+}
 
 detect_volume() { findmnt -no SOURCE /home/ubuntu 2>/dev/null | sed 's|/var/lib/docker/volumes/||; s|/_data||'; }
 
@@ -95,17 +98,21 @@ do_plan() {
   local img vol name
   img=$(image_ref)
   vol=$(detect_volume)
-  [ -z "$vol" ] && vol=ubuntu-xrdp-home
-  name=$(cat /etc/hostname 2>/dev/null || printf 'ubuntu-xrdp')
+  [ -z "$vol" ] && vol=ubuntu-mate-xrdp-home
+  name=$(cat /etc/hostname 2>/dev/null || printf 'ubuntu-mate-xrdp')
   cat <<EOF
 Migrating the desktop to a newer Ubuntu, without touching your data
 ----------------------------------------------------------------------
-Your /home/ubuntu is a Docker volume. Rebuilding the image and reusing the same volume keeps
+Your /home/ubuntu is a Docker volume. Building the newer image and reusing the same volume keeps
 every file, every setting and the whole Hermes state exactly as it is.
 
-  docker pull $img
+  git -C <your clone of this repository> pull
+  docker build -t $img <your clone of this repository>
   docker stop $name && docker rm $name
   docker run -d --name $name -p 3389:3389 -v $vol:/home/ubuntu $img
+
+$img is the tag from /etc/ubuntu-image-ref, $vol is the Docker volume holding /home/ubuntu and
+$name is this container's name or id. Adjust the last two to whatever you used on the command line.
 
 Then connect with an RDP client again - same user, same desktop, newer Ubuntu.
 

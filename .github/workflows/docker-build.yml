@@ -8,7 +8,6 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}
   NAME: ubuntu-mate-xrdp
 
 jobs:
@@ -17,7 +16,6 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
-      packages: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -32,13 +30,11 @@ jobs:
           df -h / | tail -1
 
       # Every push and pull request builds the image, which is the check itself: a Dockerfile that
-      # cannot produce a working image never reaches main. Pushes to main also publish it, so
-      # `docker pull` works without cloning and the desktop's own System Upgrade tool has something
-      # to point at (see /etc/ubuntu-image-ref in the image).
-      # A desktop image is ~12 GB, and the default docker driver writes a second full copy of it
-      # when it exports - that is what runs the runner out of disk. The containerd-based builder
-      # streams the layers straight to the registry (or keeps them in its own cache for a pull
-      # request build) so there is never a second copy on disk.
+      # cannot produce a working image never reaches main. Nothing is exported to a local image, so
+      # a 12 GB desktop does not need twice the disk; the next job builds the runnable copy.
+      # A desktop image is ~12 GB and the default docker driver writes a second full copy when it
+      # exports, which is what ran the runner out of disk. The containerd-based builder keeps one
+      # copy in its own cache, and the job below builds the runnable one with plain docker build.
       - name: Set up buildx
         uses: docker/setup-buildx-action@v3
 
@@ -46,36 +42,34 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          tags: |
-            ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:26.04
+          push: false
+          load: false
+          tags:
+            ${{ env.NAME }}:ci
 
-  # The desktop is only useful if somebody can actually log into it. This job starts the image that
-  # was just published, connects an RDP client to it and types the credentials into the real login
-  # window, then reads back what that user got (root, package state, Hermes, dock, no clock widget)
-  # and keeps screenshots. The step summary holds the table; the screenshots are an artifact.
+  # The desktop is only useful if somebody can actually log into it. This job builds the image,
+  # starts it, connects an RDP client and types the credentials into the real login window, then
+  # reads back what that user got (root, package state, Hermes, dock, no clock widget) and keeps
+  # screenshots. The step summary holds the table; the artifact has the images.
   rdp-login:
     name: Real RDP login check
     needs: build
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Set up the runner
         run: |
           sudo apt-get update -qq >/dev/null
           sudo apt-get install -y -qq xvfb freerdp2-x11 xdotool imagemagick >/dev/null
 
-      - name: Start the desktop container
+      - name: Build and start the desktop container
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker pull "$IMAGE:latest"
-          echo "image size: $(docker image inspect --format '{{.Size}}' "$IMAGE:latest") bytes"
-          docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$IMAGE:latest"
+          df -h / | tail -1
+          docker build -t "$NAME:local" .
+          echo "image size: $(docker image inspect --format '{{.Size}}' "$NAME:local") bytes"
+          docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$NAME:local"
           for i in $(seq 1 30); do
             s=$(docker inspect --format '{{.State.Health.Status}}' "$NAME")
             [ "$s" = healthy ] && break
@@ -132,7 +126,7 @@ jobs:
           {
             echo "## RDP session checks"
             echo
-            echo "Container: \`$NAME\` from \`$IMAGE:latest\` (this commit)."
+            echo "Container: \`$NAME\`, built from this commit by the job above."
             echo
             echo "| Check | Result |"
             echo '| --- | --- |'
@@ -171,7 +165,7 @@ jobs:
           docker logs "$NAME" 2>&1 | grep -iE "login (successful|failed)" | tail -1
           docker rm -f "$NAME" >/dev/null
           sleep 2
-          docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$IMAGE:latest" >/dev/null
+          docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$NAME:local" >/dev/null
           sleep 40
           echo "persisted after recreating the container: $(docker exec "$NAME" cat /home/ubuntu/persist-check.txt)"
 

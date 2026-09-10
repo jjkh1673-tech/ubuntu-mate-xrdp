@@ -37,7 +37,7 @@ launcher are removed from the layout file - snapd cannot exist inside a containe
 ## Requirements
 
 - Docker installed and running (`docker --version` and `docker info >/dev/null && echo ok`).
-- About 10 GB free disk for the image, 4 GB RAM for the desktop.
+- About 15 GB free disk (the finished image is roughly 12 GB) and 4 GB of RAM for the desktop.
 - An RDP client: `Remmina` or `mstsc` (Windows), `Microsoft Remote Desktop` (macOS), `xfreerdp` (Linux).
 
 ## Run it
@@ -62,11 +62,15 @@ password: 1122
 The `-v ubuntu-mate-xrdp-home:/home/ubuntu` part is what keeps your files, shell history and Hermes
 memory when you delete and recreate the container. Add it always.
 
-To pull a prebuilt image instead of building:
+### Publishing the image (optional)
+
+CI only builds the image; nothing is pushed to a registry, because creating the package needs a
+token with `write:packages`, which a workflow token does not get on a personal account. If you want
+your own image in GHCR, tag and push it once:
 
 ```bash
-docker pull ghcr.io/jjkh1673-tech/ubuntu-mate-xrdp:latest
-docker run -d --name ubuntu-mate-xrdp -p 3389:3389 -v ubuntu-mate-xrdp-home:/home/ubuntu ghcr.io/jjkh1673-tech/ubuntu-mate-xrdp:latest
+echo <token with write:packages> | docker login ghcr.io -u <you> --password-stdin
+docker tag ubuntu-mate-xrdp:26.04 ghcr.io/<you>/ubuntu-mate-xrdp:latest && docker push ghcr.io/<you>/ubuntu-mate-xrdp:latest
 ```
 
 ### First login: change the password
