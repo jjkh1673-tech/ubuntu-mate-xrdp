@@ -94,7 +94,7 @@ RUN printf 'mate-session\n' > /home/ubuntu/.xsession && \
     chmod 700 /home/ubuntu/.xsession && \
     printf 'exec mate-session\n' > /etc/xrdp/startwm.sh && \
     chmod +x /etc/xrdp/startwm.sh && \
-    sed -i 's/^allowed_users=.*/allowed_users=anybody/' /etc/X11/Xwrapper.config || true
+    if [ -f /etc/X11/Xwrapper.config ]; then sed -i 's/^allowed_users=.*/allowed_users=anybody/' /etc/X11/Xwrapper.config; fi
 
 # The real upstream Hermes Agent - installed exactly the way its own documentation says, for the
 # ubuntu user, so its home, memory and skills live in the mounted volume and no key is baked in.

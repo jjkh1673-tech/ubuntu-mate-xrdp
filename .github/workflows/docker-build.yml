@@ -35,6 +35,13 @@ jobs:
       # cannot produce a working image never reaches main. Pushes to main also publish it, so
       # `docker pull` works without cloning and the desktop's own System Upgrade tool has something
       # to point at (see /etc/ubuntu-image-ref in the image).
+      # A desktop image is ~12 GB, and the default docker driver writes a second full copy of it
+      # when it exports - that is what runs the runner out of disk. The containerd-based builder
+      # streams the layers straight to the registry (or keeps them in its own cache for a pull
+      # request build) so there is never a second copy on disk.
+      - name: Set up buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build image (and publish it on main)
         uses: docker/build-push-action@v6
         with:
