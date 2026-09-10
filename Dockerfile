@@ -118,9 +118,14 @@ RUN ok=0; \
 
 # Hermes Desktop: the same upstream project's own GUI, built by `hermes desktop --build-only`.
 # No third-party .deb is installed. If the build cannot run (no network on a custom builder) the
-# image is still fine - the launcher then compiles it on first start.
+# image is still fine - the launcher then compiles it on first start. The caches are deleted in the
+# same layer, because the electron download and the npm cache are ~1 GB of data nothing needs after
+# the packaged app exists.
 RUN su - ubuntu -c 'export PATH="/home/ubuntu/.local/bin:$PATH"; cd ~ && timeout 1800 hermes desktop --build-only' \
-      || echo 'WARNING: Hermes Desktop pre-build did not finish; it will be built on first launch.'
+      || echo 'WARNING: Hermes Desktop pre-build did not finish; it will be built on first launch.'; \
+    rm -rf /home/ubuntu/.cache/electron /home/ubuntu/.cache/electron-builder \
+           /home/ubuntu/.npm /home/ubuntu/.hermes/hermes-agent/node_modules/.cache \
+           /var/lib/apt/lists/* /tmp/*
 
 # MATE ships a panel layout that does not fit this desktop: the Brisk menu is replaced by the
 # stock menu bar (the Mint-style mate-menu applet races at first login and its button stays

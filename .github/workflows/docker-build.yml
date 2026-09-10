@@ -21,6 +21,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # A desktop image with an Electron build inside needs more disk than the runner keeps free by
+      # default, so the toolchains this workflow never uses are removed first.
+      - name: Free disk space for the build
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" /usr/local/.ghcup
+          sudo docker system prune -af >/dev/null 2>&1 || true
+          df -h / | tail -1
+
       # Every push and pull request builds the image - that build is the check. Pushes to main also
       # publish it, so `docker pull` works without cloning and the desktop's System Upgrade tool has
       # something to point at (see /etc/ubuntu-image-ref in the image).
