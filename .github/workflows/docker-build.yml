@@ -1,4 +1,4 @@
-name: Docker build and RDP check
+name: Docker build
 
 on:
   push:
@@ -8,37 +8,85 @@ on:
   workflow_dispatch:
 
 env:
+  IMAGE: ghcr.io/${{ github.repository }}
   NAME: ubuntu-mate-xrdp
 
 jobs:
-  # One job, one build. The image is built, started, and then logged into with a real RDP client -
-  # a Dockerfile that produces a broken desktop must not reach main, and "it compiled" is not the
-  # bar for a desktop. The step summary holds the check table; the screenshots are an artifact.
-  desktop:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
       contents: read
+      packages: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # A desktop image with an Electron build inside needs more disk than the runner keeps free by
+      # default, so the toolchains this workflow never uses are removed first.
+      - name: Free disk space for the build
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" /usr/local/.ghcup
+          sudo docker system prune -af >/dev/null 2>&1 || true
+          df -h / | tail -1
+
+      # Every push and pull request builds the image, which is the check itself: a Dockerfile that
+      # cannot produce a working image never reaches main. Pushes to main also publish it, so
+      # `docker pull` works without cloning and the desktop's own System Upgrade tool has something
+      # to point at (see /etc/ubuntu-image-ref in the image).
+      # A desktop image is ~12 GB, and the default docker driver writes a second full copy of it
+      # when it exports - that is what runs the runner out of disk. The containerd-based builder
+      # streams the layers straight to the registry (or keeps them in its own cache for a pull
+      # request build) so there is never a second copy on disk.
+      - name: Set up buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The registry rejects an anonymous push, so the job's own token is used. This is the step
+      # that was missing when the publish failed with 403: the image had already been streamed.
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image (and publish it on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:26.04
+
+  # The desktop is only useful if somebody can actually log into it. This job starts the image that
+  # was just published, connects an RDP client to it and types the credentials into the real login
+  # window, then reads back what that user got (root, package state, Hermes, dock, no clock widget)
+  # and keeps screenshots. The step summary holds the table; the screenshots are an artifact.
+  rdp-login:
+    name: Real RDP login check
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    steps:
       - name: Set up the runner
         run: |
           sudo apt-get update -qq >/dev/null
           sudo apt-get install -y -qq xvfb freerdp2-x11 xdotool imagemagick >/dev/null
 
-      - name: Build the image
-        run: |
-          df -h / | tail -1
-          docker build -t "$NAME:local" .
-          echo "image size: $(docker image inspect --format '{{.Size}}' "$NAME:local") bytes"
-          docker history "$NAME:local" --no-trunc --format '{{.Size}}' | head -3
-
       - name: Start the desktop container
         run: |
-          docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$NAME:local"
-          for i in $(seq 1 40); do
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker pull "$IMAGE:latest"
+          echo "image size: $(docker image inspect --format '{{.Size}}' "$IMAGE:latest") bytes"
+          docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$IMAGE:latest"
+          for i in $(seq 1 30); do
             s=$(docker inspect --format '{{.State.Health.Status}}' "$NAME")
             [ "$s" = healthy ] && break
             sleep 5
@@ -58,8 +106,6 @@ jobs:
           W=$(xdotool search --class freerdp | tail -1)
           if [ -z "$W" ]; then tail -20 /tmp/rdp.log; exit 1; fi
           import -window root /tmp/shots/01-rdp-login-window.png
-          # the login window arrives with a pre-filled user name; clear it and type ubuntu / 1122
-          # into the fields exactly like a person would
           xdotool windowfocus "$W"; xdotool mousemove 650 442 click 1; sleep 1
           for i in $(seq 1 14); do xdotool key BackSpace; done
           xdotool type --clearmodifiers --delay 70 ubuntu
@@ -83,7 +129,7 @@ jobs:
             printf "Desktop icons\t%s\n" "$(ls ~/Desktop | tr "\n" " ")"
             printf "Shell prompt\t%s\n" "$(bash -ic "echo \$PS1" 2>/dev/null | tail -1 | cut -c1-30)"
             printf "Terminal colours\t%s (from the shipped dconf defaults)\n" "$(dconf read /org/mate/terminal/profiles/default/background-color 2>/dev/null)"
-            printf "Root for the RDP user\t%s (uid %s)\n" "$(sudo -n id -un)" "$(sudo -n id -u)"
+            printf "Root for the RDP user\t%s\n" "$(sudo -n id -un) - $(sudo -n id -u)"
             printf "Machine\t%s CPUs, %s GB RAM\n" "$(nproc)" "$(free -g | awk "/Mem:/{print \$2}")"
             printf "Package state\t%s\n" "$(apt-get -s upgrade | grep -o "[0-9]* upgraded,.*not upgraded")"
             printf "Hermes CLI\t%s\n" "$(hermes --version | head -1)"
@@ -96,14 +142,14 @@ jobs:
           {
             echo "## RDP session checks"
             echo
-            echo "Container: \`$NAME\`, built from this commit by the job above."
+            echo "Container: \`$NAME\` from \`$IMAGE:latest\` (this commit)."
             echo
             echo "| Check | Result |"
             echo '| --- | --- |'
-            echo "| RDP login | $(docker logs "$NAME" 2>&1 | grep -oE 'login successful for user ubuntu on display [0-9]+' | tail -1 || echo 'see the log') |"
+            echo "| RDP login | $(docker logs "$NAME" 2>&1 | grep -oE 'login successful for user ubuntu on display [0-9]+' | tail -1 || echo 'see log') |"
             awk -F'\t' 'NF>1 { printf "| %s | %s |\n", $1, $2 }' /tmp/checks.txt
             echo
-            echo "Screenshots: the \`rdp-screenshots\` artifact of this run."
+            echo "Screenshots: download the \`rdp-screenshots\` artifact of this run."
           } >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/checks.txt
 
@@ -135,7 +181,7 @@ jobs:
           docker logs "$NAME" 2>&1 | grep -iE "login (successful|failed)" | tail -1
           docker rm -f "$NAME" >/dev/null
           sleep 2
-          docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$NAME:local" >/dev/null
+          docker run -d --name "$NAME" -p 3389:3389 -v "$NAME"-home:/home/ubuntu "$IMAGE:latest" >/dev/null
           sleep 40
           echo "persisted after recreating the container: $(docker exec "$NAME" cat /home/ubuntu/persist-check.txt)"
 

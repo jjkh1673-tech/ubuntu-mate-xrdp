@@ -71,7 +71,7 @@ is_newer() { # is_newer <a> <b> -> 0 when a > b
 
 image_ref() {
   if [ -f "$IMAGE_REF_FILE" ]; then head -1 "$IMAGE_REF_FILE"; return; fi
-  printf '<your image tag, for example ubuntu-xrdp:26.04>\n'
+  printf 'the tag you built, for example ubuntu-mate-xrdp:26.04\n' "ubuntu-mate-xrdp"
 }
 
 detect_volume() { findmnt -no SOURCE /home/ubuntu 2>/dev/null | sed 's|/var/lib/docker/volumes/||; s|/_data||'; }
@@ -103,11 +103,10 @@ do_plan() {
   cat <<EOF
 Migrating the desktop to a newer Ubuntu, without touching your data
 ----------------------------------------------------------------------
-Your /home/ubuntu is a Docker volume. Building the newer image and reusing the same volume keeps
+Your /home/ubuntu is a Docker volume. Pulling the newer image and reusing the same volume keeps
 every file, every setting and the whole Hermes state exactly as it is.
 
-  git -C <your clone of this repository> pull
-  docker build -t $img <your clone of this repository>
+  docker pull $img
   docker stop $name && docker rm $name
   docker run -d --name $name -p 3389:3389 -v $vol:/home/ubuntu $img
 

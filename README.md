@@ -62,15 +62,11 @@ password: 1122
 The `-v ubuntu-mate-xrdp-home:/home/ubuntu` part is what keeps your files, shell history and Hermes
 memory when you delete and recreate the container. Add it always.
 
-### Publishing the image (optional)
-
-CI only builds the image; nothing is pushed to a registry, because creating the package needs a
-token with `write:packages`, which a workflow token does not get on a personal account. If you want
-your own image in GHCR, tag and push it once:
+To pull a prebuilt image instead of building it (CI publishes this tag on every push to main):
 
 ```bash
-echo <token with write:packages> | docker login ghcr.io -u <you> --password-stdin
-docker tag ubuntu-mate-xrdp:26.04 ghcr.io/<you>/ubuntu-mate-xrdp:latest && docker push ghcr.io/<you>/ubuntu-mate-xrdp:latest
+docker pull ghcr.io/jjkh1673-tech/ubuntu-mate-xrdp:latest
+docker run -d --name ubuntu-mate-xrdp -p 3389:3389 -v ubuntu-mate-xrdp-home:/home/ubuntu ghcr.io/jjkh1673-tech/ubuntu-mate-xrdp:latest
 ```
 
 ### First login: change the password
