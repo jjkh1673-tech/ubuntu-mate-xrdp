@@ -217,31 +217,33 @@ container and typing the credentials into the login window.
 
 | What was checked | How it was checked | Result |
 | --- | --- | --- |
-| Image builds from a clean checkout | `docker build` on the pushed commit in CI | success - the image is 6 451 092 101 bytes (6.0 GiB) |
+| Image builds from a clean checkout | `docker build` on the pushed commit in CI | success - the image is 6 451 617 036 bytes (6.0 GiB) |
 | Container comes up and stays up | `docker inspect` health and restart count | `healthy`, restarts 0 |
 | RDP login typed by hand | `xfreerdp` against `localhost:3389`; `ubuntu` and `1122` typed into xrdp's own form | `Access permitted for user: ubuntu`, `X server :10 is working`, `Session in progress on display :10` |
-| The client really receives the desktop | distinct colours in the screenshot the client was shown (xrdp's grey login dialog is under 30) | 179 833 colours right after the login, 129 032 in the terminal shot |
+| The client really receives the desktop | distinct colours in the screenshot the client was shown (xrdp's grey login dialog is under 30) | 180 161 colours right after the login, 129 080 in the terminal shot |
 | No clock widget on the desktop | `pgrep -c xclock` | 0 |
 | Dock and desktop contents | `ls ~/.config/plank/dock1/launchers` and `ls ~/Desktop` | caja, hermes, mate-terminal, ubuntu-migrate; `hermes-ai.desktop` on the desktop |
 | Wallpaper is the file in this repository | md5 inside the image vs the repository file | `a9068cf41aa27d2f9d7a213abdfbfdbc` in both |
 | Root for the RDP user | `sudo -n id -un` inside the session | `root`, uid 0 |
 | Nothing waiting to be updated after the setup | `apt-get -s upgrade` inside the session | `0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded` |
-| Hermes agent | `hermes --version` inside the session | Hermes Agent v0.21.1 (2026.9.7) - upstream 94f77dfa |
+| Hermes agent | `hermes --version` inside the session | Hermes Agent v0.21.1 (2026.9.7) - upstream 77e55b4d |
 | Hermes commands installed for the desktop | `ls /usr/local/bin` | `ai`, `hermes`, `hermes-agent`, `hermes-ai`, `hermes-desktop-launch`, `ubuntu-migrate`, `apply-theme.sh`, `first-run-notice` |
-| Desktop app | `hermes desktop --help` in the image; it is pre-built by `hermes desktop --build-only` at build time | the upstream `hermes desktop` command, launched from the dock and the desktop icon |
+| Desktop app built into the image | `hermes desktop --build-only` runs during the build; the packaged artifact is then launched by the dock and the desktop icon | upstream `hermes desktop` command, no third-party package |
+| Desktop app actually starts in the session | the CI job runs `/usr/local/bin/hermes-desktop-launch` inside the RDP session and counts the processes it leaves behind | 9 processes, the main one being `~/.hermes/hermes-agent/apps/desktop/release/linux-unpacked/Hermes`, and 13 221 colours on the client screen while it comes up |
+| Published image can be pulled without a login | anonymous manifest request against `ghcr.io` | HTTP 200 for `:latest` and `:26.04` |
 | System Upgrade tool | `ubuntu-migrate --check` inside the session | `current : Ubuntu 26.04 (resolute)`, `newest : Ubuntu 26.04 LTS`, `status : up to date` |
 | Login notice and its switch | marker file `~/.config/first-run-notice.done`; `ubuntu-migrate notifications off` | notice shown once; the switch writes `~/.config/ubuntu-migrate/config` |
-| Terminal look | the shipped default profile read back from the session | background `'#10131AFF'`, 16-colour palette, 10 000-line scrollback, two-line `lambda` prompt |
+| Terminal look | the shipped default profile read back from the session | background '#10131AFF', 16-colour palette, 10 000-line scrollback, two-line `lambda` prompt |
 | Restart and log in again | `docker restart`, then a second typed login | `healthy`, desktop came back on the second login |
-| Your files survive a new container | a file written in the session, then `docker rm` + `docker run` with the same volume | `persisted after recreating the container: written 2026-09-10T17:42:21+00:00` |
+| Your files survive a new container | a file written in the session, then `docker rm` + `docker run` with the same volume | `persisted after recreating the container: written 2026-09-10T18:30:33+00:00` |
 | Nothing secret in the repository | grep of the pushed tree for `ghp_`, `github_pat_`, `sk-`, API-key shapes | no matches |
 
 Not verified, and not verifiable from here: an actual model request through Hermes (that needs your
 own provider key, which is deliberately not in the image), and accelerated video or 3D playback -
 an RDP session is software-rendered.
 
-Where the checking ran: on GitHub's `ubuntu-latest` runner (4 vCPU, 16 GB, root), CI run 34 on
-commit `c5da25a`, with the screenshots above attached to that run as the `rdp-screenshots` artifact.
+Where the checking ran: on GitHub's `ubuntu-latest` runner (4 vCPU, 16 GB, root), CI run 36 on
+commit `af67347`, with the screenshots above attached to that run as the `rdp-screenshots` artifact.
 The codespace route is open too, but this account is currently out of Codespaces hours - creating one
 answers `HTTP 402: you are out of monthly free usage or have exceeded your budget for Codespaces` -
 so the interactive checks could not be run there this time. The runner is the same size as the

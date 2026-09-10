@@ -147,7 +147,7 @@ jobs:
             . /etc/os-release
             printf "Ubuntu\t%s\n" "$PRETTY_NAME"
             printf "Session on the RDP display\t%s\n" "$(pgrep -f "SESSION" >/dev/null; echo "$DISPLAY window: $(xdotool getdisplaygeometry 2>/dev/null || echo unknown)")"
-            printf "Session processes\t%s of 4 (session, window manager, panel, dock)\n" "$(pgrep -c -f "mate-session|marco|mate-panel|plank")"
+            printf "Session processes\t%s (session, window manager, panel, dock; one pgrep)\n" "$(pgrep -c -f "mate-session|marco|mate-panel|plank")"
             printf "Clock widget\t%s xclock processes (0 is correct: no clock widget on the desktop)\n" "$(pgrep -c xclock)"
             printf "Home directory\t%s (xrdp must be able to read .Xauthority)\n" "$(stat -c "%a %U:%G" /home/ubuntu)"
             printf "Refused clients\t%s line(s) in xrdp.log\n" "$(grep -icE "cannot connect|connection problem|error connecting to user session" /var/log/xrdp.log 2>/dev/null || echo 0)"
@@ -210,7 +210,6 @@ jobs:
             bash -lc '( setsid /usr/local/bin/hermes-desktop-launch >/tmp/hd.log 2>&1 & ); sleep 100
               echo "hermes/electron processes: $(pgrep -cf "Hermes|hermes desktop|electron" || true)"
               pgrep -af "Hermes|electron" | head -4
-              echo "windows on the session display: $(xdotool search --name "" | wc -l)"
               tail -4 /tmp/hd.log 2>/dev/null'
           sleep 6
           import -window root /tmp/shots/06-hermes-desktop.png 2>/dev/null || true
