@@ -105,28 +105,38 @@ jobs:
           sleep 14
           W=$(xdotool search --class freerdp | tail -1)
           if [ -z "$W" ]; then tail -20 /tmp/rdp.log; exit 1; fi
+          xdotool windowfocus "$W" 2>/dev/null || true
           import -window root /tmp/shots/01-rdp-login-window.png
-          # xrdp opens its login form with the cursor in the user field and the field pre-filled
-          # with the client's own user name. Clear it and type ubuntu / 1122 - keyboard only, no
-          # clicking, because a click outside the field drops the focus the form just set.
-          xdotool windowfocus "$W"; windowactivate "$W" 2>/dev/null; sleep 2
+          # xrdp draws this form itself inside the session, so at 1280x800 its fields are at fixed
+          # positions: the user entry at y=412, the password entry at y=439, the OK button at
+          # y=541. The form arrives with the client's own user name pre-filled and the caret in the
+          # password field, so each field is clicked before it is typed into - a click somewhere
+          # else drops the caret and the keystrokes land in the wrong box.
+          xdotool mousemove 681 412 click 1; sleep 1
           for i in $(seq 1 20); do xdotool key BackSpace; done
           xdotool type --clearmodifiers --delay 90 ubuntu
-          xdotool key Tab; sleep 1
+          xdotool mousemove 681 439 click 1; sleep 1
+          for i in $(seq 1 12); do xdotool key BackSpace; done
           xdotool type --clearmodifiers --delay 90 1122
           sleep 1
           import -window root /tmp/shots/02-credentials-typed.png
-          xdotool key Return
-          sleep 50
+          xdotool mousemove 650 541 click 1
+          sleep 8
+          if [ "$(docker logs "$NAME" 2>&1 | grep -c 'login successful for user ubuntu')" = 0 ]; then
+            echo "the OK click did not submit; sending Return"
+            xdotool key Return
+            sleep 8
+          fi
+          sleep 45
           LOGIN=$(docker logs "$NAME" 2>&1 | grep -c "login successful for user ubuntu")
-          echo "typed login attempts that succeeded: $LOGIN"
+          echo "successful logins for ubuntu after the typed attempt: $LOGIN"
           if [ "$LOGIN" = 0 ]; then
-            echo "the typed attempt did not land; retrying with the credentials handed to the client"
-            pkill -f xfreerdp; sleep 3
+            echo "retrying with the credentials handed to the client instead of typed into the form"
+            pkill -f xfreerdp || true; sleep 3
             nohup xfreerdp /v:127.0.0.1 /cert:ignore /size:1280x800 /u:ubuntu /p:1122 >/tmp/rdp2.log 2>&1 &
             sleep 50
             LOGIN=$(docker logs "$NAME" 2>&1 | grep -c "login successful for user ubuntu")
-            echo "login after the retry: $LOGIN"
+            echo "successful logins after the retry: $LOGIN"
           fi
           import -window root /tmp/shots/03-desktop-after-login.png
           import -window "$W" /tmp/shots/03b-desktop-window.png 2>/dev/null || true
