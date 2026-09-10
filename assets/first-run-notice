@@ -1,0 +1,16 @@
+#!/bin/bash
+# One-time welcome bubble for a fresh desktop, shown the first time someone logs in.
+# It states the default RDP password and the one command that changes it, because the image
+# ships with a known password on purpose (see README "First login").
+MARK="$HOME/.config/first-run-notice.done"
+[ -f "$MARK" ] && exit 0
+mkdir -p "$(dirname "$MARK")"
+: > "$MARK"
+command -v notify-send >/dev/null || exit 0
+sleep 6
+notify-send -u normal -a "Welcome" "Your Ubuntu desktop is ready" \
+"RDP user: ubuntu    default password: 1122
+Change it now:  open a terminal and run  passwd
+Hermes agent:   ai        (first run asks for a model provider key)
+Files: the left dock has Terminal, Files, System Upgrade and Hermes Desktop." 2>/dev/null || true
+exit 0

@@ -1,10 +1,16 @@
 #!/bin/sh
-# Launch Hermes Desktop (Electron) inside the XRDP session.
-# Fork: github.com/jjkh1673-tech/hermes-desktop (upstream: sir1st/hermes-desktop)
-BIN="$(command -v hermes-desktop 2>/dev/null || true)"
-[ -z "$BIN" ] && BIN="$(find /opt -maxdepth 2 -type f -name 'hermes-desktop' -print -quit 2>/dev/null)"
-if [ -n "$BIN" ]; then
-  exec "$BIN" --no-sandbox "$@"
+# Launch the official Hermes Desktop app.
+#
+# Nothing third-party is installed here: the app comes from the same installer the terminal
+# agent uses (hermes-agent.nousresearch.com), and `hermes desktop` is its own desktop launcher.
+# The image build already ran `hermes desktop --build-only`, so the packaged artifact exists and
+# the first attempt below usually starts it straight away. If it was never built (for example a
+# custom image without that step), the fallback compiles it on the spot - that takes a few
+# minutes the first time and prints progress in this window.
+export PATH="/home/ubuntu/.local/bin:/usr/local/bin:$PATH"
+cd "${HOME:-/home/ubuntu}" || exit 1
+if hermes desktop --skip-build >/tmp/hermes-desktop.log 2>&1; then
+  exit 0
 fi
-echo "Hermes Desktop binary not found" >&2
-exit 1
+echo "Hermes Desktop was not prebuilt; building it now (a few minutes, once)." >&2
+exec hermes desktop

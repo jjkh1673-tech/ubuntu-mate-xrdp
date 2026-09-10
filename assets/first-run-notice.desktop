@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome Notice
+Comment=One-time welcome bubble on the first login
+Exec=/usr/local/bin/first-run-notice
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=System Upgrade
+GenericName=Software update
+Comment=Check for a newer Ubuntu LTS, refresh packages, or migrate this desktop
+Exec=/usr/local/bin/ubuntu-migrate --gui
+Icon=system-software-update
+Terminal=false
+Type=Application
+Categories=System;Settings;Utility;
+Keywords=upgrade;update;migration;lts;release;

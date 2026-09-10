@@ -1,0 +1,207 @@
+#!/bin/bash
+# ubuntu-migrate - the "move this desktop to the newest Ubuntu" tool.
+#
+# It has one job: tell you when a newer Ubuntu release exists for this image, and give you a
+# single, safe way to get there. Your home directory (files, Hermes state, settings) is a Docker
+# volume, so migrating never touches it.
+#
+#   ubuntu-migrate --check             print current + newest LTS, exit 0 if a newer one exists
+#   ubuntu-migrate --apply           upgrade every package inside this image (no data change)
+#   ubuntu-migrate --migrate-lts     run Ubuntu's own release upgrade (do-release-upgrade)
+#   ubuntu-migrate --plan            print the exact docker commands that swap the image only
+#   ubuntu-migrate --gui             the same things in a window (Settings menu / dock icon)
+#   ubuntu-migrate --notify-on-login session autostart: one bubble per release, never again
+#   ubuntu-migrate notifications on|off   the separate switch, stored per user
+set -u
+
+CONF="${UBUNTU_MIGRATE_CONF:-$HOME/.config/ubuntu-migrate/config}"
+STATE="$HOME/.config/ubuntu-migrate/state"
+IMAGE_REF_FILE=/etc/ubuntu-image-ref
+META_URLS=(
+  "https://gitlab.com/ubuntu/meta-release/-/raw/ubuntu/latest/meta-release-lts?inline=false"
+  "http://changelogs.ubuntu.com/meta-release-lts"
+)
+
+ensure_conf() {
+  [ -f "$CONF" ] || { mkdir -p "$(dirname "$CONF")"; printf 'notifications=on\nauto_check=on\n' > "$CONF"; }
+}
+
+conf_get() { # conf_get <key> <default>
+  ensure_conf
+  local v
+  v=$(sed -n "s/^$key=//p" "$CONF" 2>/dev/null | tail -1)
+  [ -n "$v" ] && printf '%s' "$v" || printf '%s' "$2"
+}
+
+conf_set() { # conf_set <key> <value>
+  ensure_conf
+  local tmp; tmp=$(mktemp)
+  grep -v "^$1=" "$CONF" > "$tmp" 2>/dev/null || true
+  printf '%s=%s\n' "$1" "$2" >> "$tmp"
+  mv "$tmp" "$CONF"
+}
+
+current_series() {
+  . /etc/os-release
+  printf '%s %s\n' "${VERSION_ID:-unknown}" "${VERSION_CODENAME:-unknown}"
+}
+
+newest_lts() { # echoes "<version> <codename>" using the release list, or nothing when offline
+  local url body
+  for url in "${META_URLS[@]}"; do
+    body=$(curl -fsSL --max-time 20 "$url" 2>/dev/null) || continue
+    # Entries look like:  Dist: Ubuntu 26.04 LTS / Series: resolute / Version: 26.04
+    printf '%s\n' "$body" | awk '
+      /^Dist: Ubuntu [0-9]/ { v=$3; s=$4 }
+      /^Derived:/ { }
+      END { if (v) print v }' | head -1
+    return 0
+  done
+  return 1
+}
+
+newest_version() { # numeric only, for comparing
+  . /etc/os-release; local cur=${VERSION_ID:-0}
+  local v
+  v=$(newest_lts | awk '{print $1}')
+  [ -z "$v" ] && v=$(newest_lts)
+  printf '%s %s\n' "${v:-}" "${cur}"
+}
+
+is_newer() { # is_newer <a> <b> -> 0 when a > b
+  [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | tail -1)" = "$1" ] && [ "$1" != "$2" ]
+}
+
+image_ref() { [ -f "$IMAGE_REF_FILE" ] && head -1 "$IMAGE_REF_FILE" || printf 'ghcr.io/OWNER/ubuntu-xrdp:latest\n'; }
+
+detect_volume() { findmnt -no SOURCE /home/ubuntu 2>/dev/null | sed 's|/var/lib/docker/volumes/||; s|/_data||'; }
+
+do_check() {
+  local cur new curv newv
+  read -r curv cur <<< "$(current_series)"
+  read -r newv _ <<< "$(newest_version)"
+  printf 'current : Ubuntu %s (%s)\n' "$curv" "$cur"
+  if [ -z "${newv:-}" ]; then
+    printf 'newest  : not reachable (no network, or the release list moved)\n'
+    return 2
+  fi
+  printf 'newest  : Ubuntu %s LTS\n' "$newv"
+  if is_newer "$newv" "$curv"; then
+    printf 'status  : MIGRATION AVAILABLE\n'
+    return 0
+  fi
+  printf 'status  : up to date\n'
+  return 1
+}
+
+do_plan() {
+  local img vol name
+  img=$(image_ref)
+  vol=$(detect_volume)
+  [ -z "$vol" ] && vol=ubuntu-xrdp-home
+  name=$(cat /etc/hostname 2>/dev/null || printf 'ubuntu-xrdp')
+  cat <<EOF
+Migrating the desktop to a newer Ubuntu, without touching your data
+----------------------------------------------------------------------
+Your /home/ubuntu is a Docker volume. Rebuilding the image and reusing the same volume keeps
+every file, every setting and the whole Hermes state exactly as it is.
+
+  docker pull $img
+  docker stop $name && docker rm $name
+  docker run -d --name $name -p 3389:3389 -v $vol:/home/ubuntu $img
+
+Then connect with an RDP client again - same user, same desktop, newer Ubuntu.
+
+Inside the container you can also refresh the packages only (no reinstall, no data change):
+  sudo ubuntu-migrate --apply
+
+For an in-place release upgrade Ubuntu's own tool is used. It works, but it rewrites system
+packages while the container runs, so take a snapshot or keep the volume backup first:
+  sudo ubuntu-migrate --migrate-lts
+EOF
+}
+
+do_apply() {
+  [ "$(id -u)" = 0 ] || { echo "run it as root: sudo ubuntu-migrate --apply" >&2; return 1; }
+  apt-get update -qq && apt-get -y -o Dpkg::Options::="--force-confdef" \
+    -o Dpkg::Options::="--force-confold" dist-upgrade
+  apt-get autoremove -y -qq
+  echo "Packages are current. Nothing in your home directory was changed."
+}
+
+do_release_upgrade() {
+  [ "$(id -u)" = 0 ] || { echo "run it as root: sudo ubuntu-migrate --migrate-lts" >&2; return 1; }
+  if [ -n "${container:-}${Container:-}" ] || [ -f /.dockerenv ]; then
+    echo "This is a container. do-release-upgrade was written for machines, so Ubuntu may refuse it."
+    echo "Recommended instead:  sudo ubuntu-migrate --plan   (same data, new image)"
+    echo
+  fi
+  sed -i 's/^Prompt=.*/Prompt=lts/' /etc/update-manager/release-upgrades 2>/dev/null || true
+  command -v do-release-upgrade >/dev/null || { echo "do-release-upgrade is not installed here" >&2; return 1; }
+  exec do-release-upgrade
+}
+
+notify_on_login() {
+  [ "$(conf_get notifications on)" = "on" ] || return 0
+  command -v notify-send >/dev/null || return 0
+  local cur new curv newv
+  read -r curv cur <<< "$(current_series)"
+  read -r newv _ <<< "$(newest_version)"
+  [ -z "${newv:-}" ] && return 0
+  is_newer "$newv" "$curv" || return 0
+  [ "$(cat "$STATE" 2>/dev/null)" = "$newv" ] && return 0
+  printf '%s' "$newv" > "$STATE"
+  notify-send -u normal -a "System Upgrade" "Ubuntu $newv LTS is available" \
+    "This desktop runs Ubuntu $curv. Opening System Upgrade shows two ways to move to $newv:
+refresh the packages, or rebuild the image and keep your volume (nothing in /home/ubuntu changes).
+Run  ubuntu-migrate --plan  for the exact commands." 2>/dev/null || true
+}
+
+gui() {
+  command -v zenity >/dev/null || { echo "zenity is not installed; use the commands from --help" >&2; return 1; }
+  local cur new curv newv status
+  read -r curv cur <<< "$(current_series)"
+  read -r newv _ <<< "$(newest_version)"
+  if [ -n "${newv:-}" ] && is_newer "$newv" "$curv"; then
+    status="Ubuntu $newv LTS is available - you are on $curv"
+  elif [ -z "${newv:-}" ]; then
+    status="Ubuntu $curv - release list unreachable"
+  else
+    status="Ubuntu $curv - already the newest LTS"
+  fi
+  local choice
+  choice=$(zenity --title="System Upgrade" --width=560 --height=330 --list --text="$status" \
+    --column=Action \
+    "Check again" \
+    "Refresh packages (safe, keeps everything)" \
+    "Show migration plan (docker commands)" \
+    "Upgrade to the next Ubuntu release (do-release-upgrade)" \
+    "Notifications: $(conf_get notifications on) (click to toggle)") || return 0
+  case "$choice" in
+    "Check again"*)
+      zenity --info --text="$(ubuntu-migrate --check 2>&1)" ;;
+    "Refresh packages"*)
+      (exec x-terminal-emulator -e "sudo ubuntu-migrate --apply; echo; read -r -p 'Press Enter to close'") >/dev/null 2>&1 & ;;
+    "Show migration plan"*)
+      zenity --text-info --title="Migration plan" --width=700 --height=480 \
+        --filename=<(ubuntu-migrate --plan) ;;
+    "Upgrade to the next"*)
+      (exec x-terminal-emulator -e "sudo ubuntu-migrate --migrate-lts") >/dev/null 2>&1 & ;;
+    "Notifications"*)
+      if [ "$(conf_get notifications on)" = "on" ]; then conf_set notifications off; else conf_get notifications on; conf_set notifications on; fi
+      zenity --info --text="Login notifications are now $(conf_get notifications on)." ;;
+  esac
+}
+
+case "${1:-}" in
+  --check)           do_check ;;
+  --plan)            do_plan ;;
+  --apply)           do_apply ;;
+  --migrate-lts)     do_release_upgrade ;;
+  --gui)             gui ;;
+  --notify-on-login) notify_on_login ;;
+  notifications)     conf_set notifications "${2:-on}"; echo "notifications=$(conf_get notifications on)" ;;
+  -h|--help|"")
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "unknown option: $1 (see ubuntu-migrate --help)" >&2; exit 2 ;;
+esac

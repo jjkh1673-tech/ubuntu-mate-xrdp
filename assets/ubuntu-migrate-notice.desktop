@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=System Upgrade Notice
+Comment=Checks for a newer Ubuntu LTS once per login
+Exec=/usr/local/bin/ubuntu-migrate --notify-on-login
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
