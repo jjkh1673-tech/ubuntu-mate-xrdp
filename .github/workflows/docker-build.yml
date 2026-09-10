@@ -129,6 +129,10 @@ jobs:
           done
           sleep 12
           echo "desktop process running after the typed login: $ok"
+          # a session can start while the client is still refused, and only xrdp's own log shows it
+          REJECT=$(docker exec "$NAME" bash -lc 'grep -icE "cannot connect|connection problem|error connecting to user session|chansrv connect failed" /var/log/xrdp.log' || true)
+          echo "client refused to attach (xrdp.log lines): $REJECT"
+          if [ "$REJECT" != 0 ]; then docker exec "$NAME" tail -30 /var/log/xrdp.log; ok=0; fi
           docker exec "$NAME" bash -lc 'grep -hiE "logged in|login successful|X server :[0-9]+ is working|Session in progress" /var/log/xrdp.log /var/log/xrdp-sesman.log | tail -4'
           import -window root /tmp/shots/03-desktop-after-login.png
           import -window "$W" /tmp/shots/03b-desktop-window.png 2>/dev/null || true
@@ -149,6 +153,8 @@ jobs:
             printf "Session on the RDP display\t%s\n" "$(pgrep -f "SESSION" >/dev/null; echo "$DISPLAY window: $(xdotool getdisplaygeometry 2>/dev/null || echo unknown)")"
             printf "Session processes\t%s of 4 (session, window manager, panel, dock)\n" "$(pgrep -c -f "mate-session|marco|mate-panel|plank")"
             printf "Clock widget\t%s xclock processes (0 is correct: no clock widget on the desktop)\n" "$(pgrep -c xclock)"
+            printf "Home directory\t%s (xrdp must be able to read .Xauthority)\n" "$(stat -c "%a %U:%G" /home/ubuntu)"
+            printf "Refused clients\t%s line(s) in xrdp.log\n" "$(grep -icE "cannot connect|connection problem|error connecting to user session" /var/log/xrdp.log 2>/dev/null || echo 0)"
             printf "Dock items\t%s\n" "$(ls ~/.config/plank/dock1/launchers/ | tr "\n" " ")"
             printf "Desktop icons\t%s\n" "$(ls ~/Desktop | tr "\n" " ")"
             printf "Shell prompt\t%s\n" "$(bash -ic "echo \$PS1" 2>/dev/null | tail -1 | cut -c1-30)"

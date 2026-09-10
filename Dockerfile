@@ -87,7 +87,15 @@ RUN apt-get update && \
 RUN usermod -aG ssl-cert xrdp && \
     echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu && \
     chmod 0440 /etc/sudoers.d/ubuntu && \
-    echo 'ubuntu:1122' | chpasswd
+    echo 'ubuntu:1122' | chpasswd && \
+    chmod 755 /home/ubuntu
+
+# The xrdp connection worker runs as its own user and has to read the session cookie in
+# /home/ubuntu/.Xauthority to attach the RDP client to the display sesman just started. The Ubuntu
+# 26.04 base image keeps a home directory closed to everyone but its owner, so the login itself
+# succeeds, the desktop comes up, and the client is then dropped with "Error connecting to user
+# session" - which is exactly what a build of this image did before this line existed. Only
+# traversal is opened; the files inside keep their own permissions.
 
 # Start MATE for the RDP session and let anybody open a session.
 RUN printf 'mate-session\n' > /home/ubuntu/.xsession && \

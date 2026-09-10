@@ -15,6 +15,11 @@ else
     echo "    passwd    - or start the container with  -e XRDP_PASSWORD='<new password>'."
 fi
 
+# Ubuntu 26.04's base image ships /home/ubuntu as 750, and a volume created from it inherits that.
+# xrdp's connection worker runs as the `xrdp` user and must read /home/ubuntu/.Xauthority to attach
+# the client to the session, so traversal is opened every start (existing volumes included).
+chmod 755 /home/ubuntu
+
 service dbus start
 
 # Audio redirection is optional and must never block the desktop, so it is daemonized and allowed
