@@ -136,56 +136,9 @@ jobs:
           docker exec "$NAME" bash -lc 'grep -hiE "logged in|login successful|X server :[0-9]+ is working|Session in progress" /var/log/xrdp.log /var/log/xrdp-sesman.log | tail -4'
           import -window root /tmp/shots/03-desktop-after-login.png
           import -window "$W" /tmp/shots/03b-desktop-window.png 2>/dev/null || true
-          # The only proof that matters is what the client can see: xrdp's own login form is a flat
-          # grey dialog (a few dozen colours), a real desktop is thousands, so the pixel count of the
-          # screen after the login settles the question without parsing any log wording.
-          COLORS=$(identify -format %k /tmp/shots/03-desktop-after-login.png)
-          echo "colours visible to the RDP client after login: $COLORS"
-          if [ "$COLORS" -lt 100 ]; then
-            echo "the session is not reaching the client; diagnostics follow, then candidate fixes are tried"
-            docker exec "$NAME" bash -c '
-              echo "--- xrdp.log"; tail -25 /var/log/xrdp.log
-              echo "--- runtime dirs"; ls -ld /run/xrdp /run/xrdp/sockdir /tmp/.X11-unix 2>&1
-              ls -l /run/xrdp/sockdir 2>&1 | head -8
-              echo "--- ids"; id xrdp; id ubuntu
-              echo "--- xauthority"; stat -c "%n %a %U:%G" /home/ubuntu/.Xauthority 2>&1
-              echo "--- xorgxrdp log"; tail -20 /home/ubuntu/.xorgxrdp.*.log 2>&1'
-            for fix in sockdir group authority; do
-              echo "### trying candidate fix: $fix"
-              case "$fix" in
-                sockdir) docker exec "$NAME" chmod 1777 /run/xrdp/sockdir ;;
-                group) docker exec "$NAME" bash -c 'chmod 750 /home/ubuntu; usermod -aG ubuntu xrdp' ;;
-                authority) docker exec "$NAME" chmod 644 /home/ubuntu/.Xauthority ;;
-              esac
-              pkill -x xfreerdp || true; sleep 3
-              nohup xfreerdp /v:127.0.0.1 /cert:ignore /size:1280x800 >/tmp/rdp_$fix.log 2>&1 &
-              sleep 12
-              W2=$(xdotool search --class freerdp | tail -1)
-              xdotool windowfocus "$W2" 2>/dev/null || true
-              xdotool mousemove 681 412 click 1; sleep 1
-              for i in $(seq 1 20); do xdotool key BackSpace; done
-              xdotool type --clearmodifiers --delay 90 ubuntu
-              xdotool mousemove 681 439 click 1; sleep 1
-              xdotool type --clearmodifiers --delay 90 1122
-              xdotool mousemove 650 541 click 1
-              sleep 35
-              import -window root /tmp/shots/03-$fix.png
-              C=$(identify -format %k /tmp/shots/03-$fix.png)
-              echo "fix $fix -> colours visible: $C"
-              if [ "$C" -ge 100 ]; then
-                echo "WORKING FIX: $fix"
-                cp /tmp/shots/03-$fix.png /tmp/shots/03-desktop-after-login.png
-                COLORS=$C
-                break
-              fi
-            done
-          fi
-          docker exec "$NAME" tail -4 /var/log/xrdp-sesman.log
-          # a desktop nobody can see is not a product
-          if [ "$COLORS" -lt 100 ]; then
-            echo "::error::the RDP client never received a rendered desktop"
-            exit 1
-          fi
+          COLORS=$(identify -format %k /tmp/shots/03-desktop-after-login.png 2>/dev/null || echo 0)
+          echo "colours visible to the RDP client right after the login: $COLORS"
+          docker exec "$NAME" tail -4 /var/log/xrdp-sesman.log || true
 
       - name: Read back what the logged-in user got
         run: |
@@ -239,6 +192,15 @@ jobs:
           done
           sleep 2
           import -window root /tmp/shots/04-typed-terminal.png
+          # the client has to be showing the desktop, not xrdp's flat grey login dialog: a real
+          # desktop with a wallpaper, a dock and a window has thousands of distinct colours
+          COLORS=$(identify -format %k /tmp/shots/04-typed-terminal.png 2>/dev/null || echo 0)
+          echo "colours visible to the RDP client in the desktop shot: $COLORS"
+          if [ "$COLORS" -lt 100 ]; then
+            echo "::error::the RDP client never received a rendered desktop"
+            docker exec "$NAME" bash -c 'tail -25 /var/log/xrdp.log; ps -o pid,user,cmd -e | grep -E "xrdp|Xorg" | grep -v grep' || true
+            exit 1
+          fi
 
       - name: Restart, reconnect, and check the volume
         run: |

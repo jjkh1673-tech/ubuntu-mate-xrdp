@@ -26,11 +26,23 @@ service dbus start
 # to fail (26.04 uses PipeWire by default; PulseAudio is what xrdp's module talks to).
 pulseaudio --system --disallow-exit --disable-shm --daemonize=yes >/var/log/pulseaudio.log 2>&1 || true
 
-# A container restart keeps the old pid files while the processes are gone, which makes the xrdp
-# init script refuse to start.
+# A container restart keeps the old pid files while the processes are gone, so they are cleared
+# before starting.
+mkdir -p /var/run/xrdp/sockdir
 rm -f /var/run/xrdp/xrdp.pid /var/run/xrdp/xrdp-sesman.pid
 
-service xrdp start
+# xrdp 0.10 gives every logged-in user a runtime directory (/run/xrdp/sockdir/<uid>) holding the
+# session's X authority and API socket, and creates it as that user with mode 2770. Ubuntu's sysvinit
+# script starts the daemons as the unprivileged `xrdp` user, which then cannot enter it: the login is
+# accepted, the desktop starts, and the client is dropped with "Error connecting to user session".
+# So the two daemons are started here as root, which is also what the upstream systemd units do.
+# Sessions themselves still run as the logged-in user, because sesman drops privileges on its own.
+if [ -x /usr/sbin/xrdp ] && [ -x /usr/sbin/xrdp-sesman ]; then
+    /usr/sbin/xrdp-sesman
+    /usr/sbin/xrdp
+else
+    service xrdp start
+fi
 
 mkdir -p /tmp/.X11-unix
 chmod 1777 /tmp/.X11-unix
