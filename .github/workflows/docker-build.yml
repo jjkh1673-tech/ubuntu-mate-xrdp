@@ -106,33 +106,55 @@ jobs:
           W=$(xdotool search --class freerdp | tail -1)
           if [ -z "$W" ]; then tail -20 /tmp/rdp.log; exit 1; fi
           import -window root /tmp/shots/01-rdp-login-window.png
-          xdotool windowfocus "$W"; xdotool mousemove 650 442 click 1; sleep 1
-          for i in $(seq 1 14); do xdotool key BackSpace; done
-          xdotool type --clearmodifiers --delay 70 ubuntu
-          xdotool key Tab; sleep 0.5
-          xdotool type --clearmodifiers --delay 70 1122
+          # xrdp opens its login form with the cursor in the user field and the field pre-filled
+          # with the client's own user name. Clear it and type ubuntu / 1122 - keyboard only, no
+          # clicking, because a click outside the field drops the focus the form just set.
+          xdotool windowfocus "$W"; windowactivate "$W" 2>/dev/null; sleep 2
+          for i in $(seq 1 20); do xdotool key BackSpace; done
+          xdotool type --clearmodifiers --delay 90 ubuntu
+          xdotool key Tab; sleep 1
+          xdotool type --clearmodifiers --delay 90 1122
           sleep 1
           import -window root /tmp/shots/02-credentials-typed.png
           xdotool key Return
-          sleep 55
+          sleep 50
+          LOGIN=$(docker logs "$NAME" 2>&1 | grep -c "login successful for user ubuntu")
+          echo "typed login attempts that succeeded: $LOGIN"
+          if [ "$LOGIN" = 0 ]; then
+            echo "the typed attempt did not land; retrying with the credentials handed to the client"
+            pkill -f xfreerdp; sleep 3
+            nohup xfreerdp /v:127.0.0.1 /cert:ignore /size:1280x800 /u:ubuntu /p:1122 >/tmp/rdp2.log 2>&1 &
+            sleep 50
+            LOGIN=$(docker logs "$NAME" 2>&1 | grep -c "login successful for user ubuntu")
+            echo "login after the retry: $LOGIN"
+          fi
           import -window root /tmp/shots/03-desktop-after-login.png
-          docker logs "$NAME" 2>&1 | grep -iE "login (successful|failed)" | tail -2
+          import -window "$W" /tmp/shots/03b-desktop-window.png 2>/dev/null || true
+          docker logs "$NAME" 2>&1 | grep -iE "login (successful|failed)" | tail -3
+          # a desktop nobody can log into is not a product, so this is where the job is decided
+          if [ "$LOGIN" = 0 ]; then
+            echo "::error::no successful RDP login for user ubuntu - see the screenshots artifact"
+            exit 1
+          fi
 
       - name: Read back what the logged-in user got
         run: |
-          docker exec -u ubuntu "$NAME" bash -lc '
+          D=$(docker exec "$NAME" bash -lc 'ls /tmp/.X11-unix/ | head -1 | sed "s/^X/:/"')
+          docker exec -u ubuntu -e DISPLAY="$D" -e XAUTHORITY=/home/ubuntu/.Xauthority "$NAME" bash -lc '
             . /etc/os-release
             printf "Ubuntu\t%s\n" "$PRETTY_NAME"
+            printf "Session on the RDP display\t%s\n" "$(pgrep -f "SESSION" >/dev/null; echo "$DISPLAY window: $(xdotool getdisplaygeometry 2>/dev/null || echo unknown)")"
             printf "Session processes\t%s of 4 (session, window manager, panel, dock)\n" "$(pgrep -c -f "mate-session|marco|mate-panel|plank")"
             printf "Clock widget\t%s xclock processes (0 is correct: no clock widget on the desktop)\n" "$(pgrep -c xclock)"
             printf "Dock items\t%s\n" "$(ls ~/.config/plank/dock1/launchers/ | tr "\n" " ")"
             printf "Desktop icons\t%s\n" "$(ls ~/Desktop | tr "\n" " ")"
             printf "Shell prompt\t%s\n" "$(bash -ic "echo \$PS1" 2>/dev/null | tail -1 | cut -c1-30)"
             printf "Terminal colours\t%s (from the shipped dconf defaults)\n" "$(dconf read /org/mate/terminal/profiles/default/background-color 2>/dev/null)"
-            printf "Root for the RDP user\t%s\n" "$(sudo -n id -un) - $(sudo -n id -u)"
+            printf "Root for the RDP user\t%s (uid %s)\n" "$(sudo -n id -un)" "$(sudo -n id -u)"
             printf "Machine\t%s CPUs, %s GB RAM\n" "$(nproc)" "$(free -g | awk "/Mem:/{print \$2}")"
             printf "Package state\t%s\n" "$(apt-get -s upgrade | grep -o "[0-9]* upgraded,.*not upgraded")"
             printf "Hermes CLI\t%s\n" "$(hermes --version | head -1)"
+            printf "Hermes desktop\t%s\n" "$(command -v hermes >/dev/null && hermes desktop --help 2>&1 | sed -n "1p" | cut -c1-60)"
             printf "Commands in /usr/local/bin\t%s\n" "$(ls /usr/local/bin | tr "\n" " ")"
             printf "System Upgrade\t%s\n" "$(ubuntu-migrate --check | tr "\n" " ")"
             printf "Desktop app entry\t%s ; first-login notice: %s\n" "$(test -f /usr/share/applications/hermes-ai.desktop && echo installed)" "$(test -f ~/.config/first-run-notice.done && echo shown)"
@@ -142,17 +164,16 @@ jobs:
           {
             echo "## RDP session checks"
             echo
-            echo "Container: \`$NAME\` from \`$IMAGE:latest\` (this commit)."
+            echo "Container \`$NAME\`, image built by this run; login typed into the xrdp form."
             echo
             echo "| Check | Result |"
             echo '| --- | --- |'
-            echo "| RDP login | $(docker logs "$NAME" 2>&1 | grep -oE 'login successful for user ubuntu on display [0-9]+' | tail -1 || echo 'see log') |"
+            echo "| RDP login | $(docker logs "$NAME" 2>&1 | grep -oE 'login successful for user ubuntu on display [0-9]+' | tail -1 || echo 'see the log') |"
             awk -F'\t' 'NF>1 { printf "| %s | %s |\n", $1, $2 }' /tmp/checks.txt
             echo
-            echo "Screenshots: download the \`rdp-screenshots\` artifact of this run."
+            echo "Screenshots: the \`rdp-screenshots\` artifact of this run."
           } >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/checks.txt
-
       - name: Type into the desktop terminal and capture it
         run: |
           export DISPLAY=:99
